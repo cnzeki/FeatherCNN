@@ -13,8 +13,12 @@
 //specific language governing permissions and limitations under the License.
 
 #include "softmax_layer.h"
+#ifdef FEATHER_AVX
+#include "avx/generic_kernels.h"
+#endif
+#ifdef FEATHER_ARM
 #include "arm/generic_kernels.h"
-
+#endif
 #include <math.h>
 
 namespace feather

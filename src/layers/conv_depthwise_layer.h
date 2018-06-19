@@ -16,9 +16,16 @@
 
 #include "../feather_simple_generated.h"
 #include "../layer.h"
+
+#ifdef FEATHER_AVX
 #include "arm/generic_kernels.h"
 #include "arm/depthwise.h"
+#endif
 
+#ifdef FEATHER_ARM
+#include "arm/generic_kernels.h"
+#include "arm/depthwise.h"
+#endif
 #include <assert.h>
 #include <stdio.h>
 

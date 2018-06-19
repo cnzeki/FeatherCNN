@@ -13,7 +13,13 @@
 //specific language governing permissions and limitations under the License.
 
 #include "relu_layer.h"
+
+#ifdef FEATHER_AVX
+#include "avx/generic_kernels.h"
+#endif
+#ifdef FEATHER_ARM
 #include "arm/generic_kernels.h"
+#endif
 
 namespace feather
 {

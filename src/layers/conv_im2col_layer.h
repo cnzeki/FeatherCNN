@@ -18,8 +18,10 @@
 #include "conv_layer.h"
 #include "blob.h"
 
+#ifdef FEATHER_ARM
 #include "arm/generic_kernels.h"
 #include "arm/sgemm.h"
+#endif
 
 #include <assert.h>
 #include <stdio.h>
@@ -53,7 +55,8 @@ class ConvIm2colLayer : public ConvLayer
         int Forward()
         {
             MEMPOOL_CHECK_RETURN(common_mempool->GetPtr(&img_buffer));
-#if 1
+//#ifdef FEATHER_ARM
+#if 0
             if (kernel_width == 1 && kernel_height == 1 && stride_height == 1 && stride_width == 1)
             {
                 if (output_channels % 8 == 0)
@@ -92,6 +95,7 @@ class ConvIm2colLayer : public ConvLayer
                 }
             }
 #else
+	    printf("im2col + naive gemm\n");
             Im2col();
             naive_sgemm(output_channels, output_height * output_width, input_channels * kernel_width * kernel_height, kernel_data, img_buffer, output);
 #endif
@@ -190,7 +194,7 @@ class ConvIm2colLayer : public ConvLayer
 
             MEMPOOL_CHECK_RETURN(private_mempool.Alloc(&packed_kernel, sizeof(float) * eM * L));
             MEMPOOL_CHECK_RETURN(common_mempool->Request(sizeof(float) * (input_channels * kernel_height * kernel_width) * (output_width * output_height)));
-
+#if 0
             if (M % 8 == 0)
             {
                 externalPackA8(M, L, packed_kernel, kernel_data, L);
@@ -199,16 +203,12 @@ class ConvIm2colLayer : public ConvLayer
             {
                 externalPackA(M, L, packed_kernel, kernel_data, L);
             }
+#endif
 
             //Setup input and output pointers.
             input = _bottom_blobs[_bottom[0]]->data();
-            //_bottom_blobs[_bottom[0]]->PrintBlobInfo();
             output = _top_blobs[_top[0]]->data();
             //_top_blobs[_top[0]]->PrintBlobInfo();
-            //printf("++stride %d %d\n", stride_height, stride_width);
-            //printf("++padding %d %d %d %d\n", padding_left, padding_top, padding_right, padding_bottom);
-            //printf("++kernel %d %d\n", kernel_width, kernel_height);
-            //printf("++bias term %d\n", bias_term);
             return 0;
         }
     private:

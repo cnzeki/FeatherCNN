@@ -91,6 +91,12 @@ int Net::Forward(float *input)
         printf("layer %s type %s spent %lfms\n", layers[i]->name().c_str(), layers[i]->type().c_str(), timedif / 1000.0);
 #endif
     }
+#if 0
+    printf("=========blob map has %d items============\n", blob_map.size());
+    for(auto iter : this->blob_map)
+	    printf("%s\n", iter.first.c_str());
+    printf("==========================================\n", blob_map.size());
+#endif
     return 0;
 }
 
@@ -224,7 +230,7 @@ bool Net::InitFromBuffer(const void *net_buffer)
 
     //Rebuild blob map
     blob_map.clear();
-    for (int i = 1; i < layers.size(); ++i)
+    for (int i = 0; i < layers.size(); ++i)
     {
         for (int t = 0; t < layers[i]->top_size(); ++t)
         {

@@ -18,9 +18,14 @@
 #include "conv_layer.h"
 #include "blob.h"
 
+#ifdef FEAHTER_AVX
+#include "avx/generic_kernels.h"
+#include "avx/winograd_kernels.h"
+#endif
+#ifdef FEATHER_ARM
 #include "arm/generic_kernels.h"
 #include "arm/winograd_kernels.h"
-
+#endif
 #include <assert.h>
 #include <stdio.h>
 

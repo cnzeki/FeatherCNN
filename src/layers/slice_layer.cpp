@@ -13,7 +13,6 @@
 //specific language governing permissions and limitations under the License.
 
 #include "slice_layer.h"
-#include "arm/generic_kernels.h"
 
 namespace feather
 {

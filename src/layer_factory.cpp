@@ -21,8 +21,13 @@
 #include "layers/conv_layer.h"
 #include "layers/conv_depthwise_layer.h"
 #include "layers/conv_im2col_layer.h"
+#ifdef FEATHER_AVX
+#include "layers/conv_winogradF63_layer.h"
+#endif
+#ifdef FEATHER_ARM
 #include "layers/conv_winograd_layer.h"
 #include "layers/conv_winogradF63_layer.h"
+#endif
 #include "layers/dropout_layer.h"
 #include "layers/batchnorm_layer.h"
 #include "layers/lrn_layer.h"
@@ -55,18 +60,23 @@ Layer *GetConvolutionLayer(const LayerParameter *layer_param, const RuntimeParam
     size_t input_channels = layer_param->blobs()->Get(0)->channels();
     size_t output_channels = layer_param->blobs()->Get(0)->num();
     ConvLayer *conv_layer = NULL;
+#ifdef FEATHER_ARM
     if (group == 1 && kernel_height == 3 && kernel_width == 3 && stride_height == 1 && stride_width == 1 && input_channels > 0 && output_channels < 512)
     {
-#if 0
-        conv_layer = (ConvLayer*) new ConvWinogradLayer(layer_param, rt_param);
-#else
         conv_layer = (ConvLayer*) new ConvWinogradF63Layer(layer_param, rt_param);
-#endif
     }
     else if (group == 1 && kernel_height == 3 && kernel_width == 3 && stride_height == 1 && stride_width == 1 && input_channels > 4)
     {
         conv_layer = (ConvLayer*) new ConvWinogradLayer(layer_param, rt_param);
     }
+#endif
+#ifdef FEATHER_AVX
+    //if (group == 1 && kernel_height == 3 && kernel_width == 3 && stride_height == 1 && stride_width == 1 && input_channels > 0)
+    if(1)
+    {
+        conv_layer = (ConvLayer*) new ConvWinogradF63Layer(layer_param, rt_param);
+    }
+#endif
     else if (group == 1)
     {
         conv_layer = (ConvLayer*) new ConvIm2colLayer(layer_param, rt_param);

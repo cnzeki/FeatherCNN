@@ -16,8 +16,13 @@
 
 #include "../feather_simple_generated.h"
 #include "../layer.h"
-#include "arm/generic_kernels.h"
 
+#ifdef FEATHER_AVX
+#include "avx/generic_kernels.h"
+#endif
+#ifdef FEATHER_ARM
+#include "arm/generic_kernels.h"
+#endif
 namespace feather
 {
 class EltwiseLayer : public Layer
