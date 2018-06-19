@@ -122,12 +122,12 @@ void packed_sgemv(const int N, const int K, const float* A, const float* B, floa
 {
 	assert(K % 4 == 0);
 	int N_aligned = N - N % 16;
+	__m256 vZero = _mm256_set1_ps(0.f);
 #pragma omp parallel for
 	for(int j = 0; j < N_aligned; j += 16)
 	{
 		const float *pB = B + j * K;
 		float *pC = C + j;
-		__m256 vZero = _mm256_set1_ps(0.f);
 		__m256 acc0 = _mm256_set1_ps(0.f);
 		__m256 acc1 = _mm256_set1_ps(0.f);
 		if(fuseBias)
@@ -178,6 +178,8 @@ void packed_sgemv(const int N, const int K, const float* A, const float* B, floa
 	{
 		const float *pB = B + N_aligned * K;
 		__m256 vacc = _mm256_set1_ps(0.f);
+		if(fuseBias)
+			vacc = _mm256_load_ps(bias_data + N_aligned);
 		__m256 va, vb;
 		float acc[4];
 		for(int k = 0; k < K; ++k)
@@ -196,14 +198,14 @@ void packed_sgemv(const int N, const int K, const float* A, const float* B, floa
 		const float *pB = B + N_aligned * K;
 		float *pC = C + N_aligned;
 		__m256 vacc = _mm256_set1_ps(0.f);
-		if(fuse_bias && rem >= 8)
+		if(fuseBias && rem >= 8)
 			vacc = _mm256_load_ps(bias_data + N_aligned);
 
 		__m256 va, vb;
 		float acc[4];
 		for(int i = 0; i < rem - 8; ++i)
 		{
-			if(fuse_bias)
+			if(fuseBias)
 				acc[i] = bias_data[N_aligned + i];
 			else
 				acc[i] = 0;
