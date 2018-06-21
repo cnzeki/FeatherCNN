@@ -23,6 +23,16 @@ void Blob<Dtype>::Alloc()
     size_t dim_byte = _num * _channels * _height * _width * sizeof(Dtype);
     _data = (Dtype*) _mm_malloc(dim_byte, 128);
 }
+template<class Dtype>
+void Blob<Dtype>::Realloc(size_t elem_size)
+{
+    if(elem_size > this->data_size())
+    {
+    	_mm_free(_data);
+    	size_t dim_byte = elem_size * _width * sizeof(Dtype);
+    	_data = (Dtype*) _mm_malloc(dim_byte, 128);
+    }
+}
 
 template<class Dtype>
 void Blob<Dtype>::FromProto(const void *proto_in)//proto MUST be of type BlobProto*

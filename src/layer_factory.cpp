@@ -71,8 +71,8 @@ Layer *GetConvolutionLayer(const LayerParameter *layer_param, const RuntimeParam
     }
 #endif
 #ifdef FEATHER_AVX
-    //if (group == 1 && kernel_height == 3 && kernel_width == 3 && stride_height == 1 && stride_width == 1 && input_channels > 0)
-    if(1)
+    //if (group == 1 && kernel_height == 3 && kernel_width == 3 && stride_height == 1 && stride_width == 1 && input_channels > 3)
+    if(0)
     {
         conv_layer = (ConvLayer*) new ConvWinogradF63Layer(layer_param, rt_param);
     }

@@ -23,6 +23,10 @@
 #include "arm/sgemm.h"
 #endif
 
+#ifdef FEATHER_AVX
+#include "avx/sgemm.h"
+#endif
+
 #include <assert.h>
 #include <stdio.h>
 
@@ -55,8 +59,7 @@ class ConvIm2colLayer : public ConvLayer
         int Forward()
         {
             MEMPOOL_CHECK_RETURN(common_mempool->GetPtr(&img_buffer));
-//#ifdef FEATHER_ARM
-#if 0
+#ifdef FEATHER_ARM
             if (kernel_width == 1 && kernel_height == 1 && stride_height == 1 && stride_width == 1)
             {
                 if (output_channels % 8 == 0)
@@ -94,10 +97,17 @@ class ConvIm2colLayer : public ConvLayer
                                                             packed_kernel, img_buffer + k * block, output, (int)num_threads);
                 }
             }
-#else
-	    printf("im2col + naive gemm\n");
+#endif
+#ifdef FEATHER_AVX
+	    printf("im2col\n");
             Im2col();
-            naive_sgemm(output_channels, output_height * output_width, input_channels * kernel_width * kernel_height, kernel_data, img_buffer, output);
+            //naive_sgemm(output_channels, output_height * output_width, input_channels * kernel_width * kernel_height, kernel_data, img_buffer, output);
+	    const int M = output_channels;
+	    const int N = output_height * output_width;
+	    const int K = input_channels * kernel_width * kernel_height;
+	    const int nc = 160;
+	    const int kc = 320;
+	    packed_sgemm(M, N, K, kernel_data, img_buffer, N, output, N, nc, kc);
 #endif
 
 
@@ -186,22 +196,53 @@ class ConvIm2colLayer : public ConvLayer
             return true;
         }
 
+        int GenerateTopBlobs()
+        {
+            //Conv layer has and only has one bottom blob.
+            const Blob<float> *bottom_blob = _bottom_blobs[_bottom[0]];
+            input_width = bottom_blob->width();
+            input_height = bottom_blob->height();
+            input_channels = bottom_blob->channels();
+            if (stride_width == 0 || stride_height == 0)
+            {
+                stride_width = 1;
+                stride_height = 1;
+            }
+            output_width = (input_width + padding_left + padding_right - kernel_width) / stride_width + 1;
+            output_height = (input_height + padding_top + padding_bottom - kernel_height) / stride_height + 1;
+            _top_blobs[_top[0]] = new Blob<float>(1, output_channels, output_height, output_width);
+            _top_blobs[_top[0]]->Alloc();
+#ifdef FEATHER_AVX
+            int M = (int)output_channels;
+	    int N = output_height * output_width;
+            _top_blobs[_top[0]]->Realloc(get_aligned_size(M, N));
+#endif
+            return 0;
+        }
+
         int Init()
         {
             int M = (int)output_channels;
-            int L = (int)input_channels * (int)kernel_height * (int)kernel_width;
+	    int N = output_height * output_width;
+            int K = (int)input_channels * (int)kernel_height * (int)kernel_width;
             int eM = M + (8 - M % 8) % 8;
 
-            MEMPOOL_CHECK_RETURN(private_mempool.Alloc(&packed_kernel, sizeof(float) * eM * L));
+
             MEMPOOL_CHECK_RETURN(common_mempool->Request(sizeof(float) * (input_channels * kernel_height * kernel_width) * (output_width * output_height)));
-#if 0
+
+#ifdef FEATHER_AVX
+            MEMPOOL_CHECK_RETURN(private_mempool.Alloc(&packed_kernel, sizeof(float) * get_aligned_size(M, K)));
+	    packed_sgemm_init<6>(M, K, 320, packed_kernel, kernel_data, K);
+#endif
+#ifdef FEATHER_ARM 
+            MEMPOOL_CHECK_RETURN(private_mempool.Alloc(&packed_kernel, sizeof(float) * eM * K));
             if (M % 8 == 0)
             {
-                externalPackA8(M, L, packed_kernel, kernel_data, L);
+                externalPackA8(M, K, packed_kernel, kernel_data, K);
             }
             else
             {
-                externalPackA(M, L, packed_kernel, kernel_data, L);
+                externalPackA(M, K, packed_kernel, kernel_data, K);
             }
 #endif
 
