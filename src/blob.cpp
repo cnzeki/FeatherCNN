@@ -29,8 +29,7 @@ void Blob<Dtype>::Realloc(size_t elem_size)
     if(elem_size > this->data_size())
     {
     	_mm_free(_data);
-    	size_t dim_byte = elem_size * _width * sizeof(Dtype);
-    	_data = (Dtype*) _mm_malloc(dim_byte, 128);
+    	_data = (Dtype*) _mm_malloc(elem_size * sizeof(Dtype), 128);
     }
 }
 

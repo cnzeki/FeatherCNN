@@ -107,9 +107,8 @@ class ConvIm2colLayer : public ConvLayer
 	    const int K = input_channels * kernel_width * kernel_height;
 	    const int nc = 160;
 	    const int kc = 320;
-	    packed_sgemm(M, N, K, kernel_data, img_buffer, N, output, N, nc, kc);
+	    packed_sgemm(M, N, K, packed_kernel, img_buffer, N, output, N, nc, kc);
 #endif
-
 
             if (bias_term)
             {
@@ -213,9 +212,12 @@ class ConvIm2colLayer : public ConvLayer
             _top_blobs[_top[0]] = new Blob<float>(1, output_channels, output_height, output_width);
             _top_blobs[_top[0]]->Alloc();
 #ifdef FEATHER_AVX
-            int M = (int)output_channels;
+            int M = (int) output_channels;
 	    int N = output_height * output_width;
             _top_blobs[_top[0]]->Realloc(get_aligned_size(M, N));
+	    printf("Realloc M %d, N %d, diff %d\n", M, N, (get_aligned_size(M, N) - M * N));
+	    float* output_xx = _top_blobs[_top[0]]->data();
+	    printf("output_xx 0x%x\n", output_xx);
 #endif
             return 0;
         }
@@ -249,6 +251,7 @@ class ConvIm2colLayer : public ConvLayer
             //Setup input and output pointers.
             input = _bottom_blobs[_bottom[0]]->data();
             output = _top_blobs[_top[0]]->data();
+	    printf("output 0x%x\n", output);
             //_top_blobs[_top[0]]->PrintBlobInfo();
             return 0;
         }

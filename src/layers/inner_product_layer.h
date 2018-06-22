@@ -48,7 +48,7 @@ class InnerProductLayer : public Layer
                 assert(this->_weight_blobs.size() == 2);
                 bias_data = this->_weight_blobs[1]->data();
             }
-	    _fusible = true;
+	    _fusible = false;
         }
 
         int Forward()

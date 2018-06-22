@@ -35,7 +35,7 @@ class ConvWinogradLayer : public ConvLayer
 {
     public:
         ConvWinogradLayer(const LayerParameter *layer_param, const RuntimeParameter<float>* rt_param)
-            : ConvLayer(layer_param, rt_param)
+            : fuse_relu(false), ConvLayer(layer_param, rt_param)
         {
             _fusible = true;
         }
@@ -82,7 +82,7 @@ class ConvWinogradLayer : public ConvLayer
 
         int Fuse(Layer *next_layer)
         {
-            if (next_layer->type().compare("ReLU") == 0)
+            if(next_layer->type().compare("ReLU") == 0)
             {
                 fuse_relu = true;
                 return 1;

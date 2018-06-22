@@ -55,7 +55,7 @@ class ConvLayer : public Layer
             }
         }
 
-        int GenerateTopBlobs()
+        virtual int GenerateTopBlobs()
         {
             //Conv layer has and only has one bottom blob.
             const Blob<float> *bottom_blob = _bottom_blobs[_bottom[0]];

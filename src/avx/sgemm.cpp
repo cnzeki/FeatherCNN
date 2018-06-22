@@ -2,6 +2,7 @@
 #include <immintrin.h>
 #include <string.h>
 
+
 int align_ceil(int num, int align)
 {
 	return num + (align - (num % align)) % align;
@@ -41,8 +42,6 @@ void inner_kernel_6x16(int K, float *packA, float *packB, float *c, int ldc)
 
 	vb0 = _mm256_load_ps(bptr);
 	vb1 = _mm256_load_ps(bptr + 8);
-	//    bptr += 24;
-
 	for(int p = 0; p < (K-1); ++p){
 		va = _mm256_broadcast_ss(aptr);
 		vc0 = _mm256_fmadd_ps(vb0, va, vc0);
@@ -73,7 +72,6 @@ void inner_kernel_6x16(int K, float *packA, float *packB, float *c, int ldc)
 		vb1 = _mm256_load_ps(bptr + 24);
 		bptr+=16;
 		aptr+=6;
-
 	}
 	va = _mm256_broadcast_ss(aptr);
 	vc0 = _mm256_fmadd_ps(vb0, va, vc0);
@@ -129,6 +127,7 @@ inline void compute_block(int M, int nc, int kc, float* packA, float* packB, flo
 {
 	//M is already aligned. 
 	int nc_aligned = align_ceil(nc, 16);
+	memset(loadC, 0, 6*nc*sizeof(float));
 	for(int i = 0; i < M; i += 6)
 	{
 		//Load C into cache
@@ -152,28 +151,22 @@ inline void compute_block(int M, int nc, int kc, float* packA, float* packB, flo
 				pL[n] = pC[n];
 			}
 		}
-		for(int j = 0; j < nc; j+=16)
+		for(int j = 0; j < nc_aligned; j+=16)
 		{
 			float* pC = loadC + j;
 			float* pA = packA + i * kc;
 			float* pB = packB + j * kc;
 			inner_kernel_6x16(kc, pA, pB, pC, nc_aligned);
-
+				
 		}
 		//Write Results
 		for(int m = 0; m < 6; ++m)
 		{
-			//for(int n = 0; n < nc; ++n)
-			//{
-			//	rC[m * ldc + n] = loadC[m * nc_aligned + n];
-			//}
 			float* pC = rC + m * ldc;
 			float* pL = loadC + m * nc_aligned;
 			for(int n = 0; n < nc; n += 8)
 			{
-				_mm256_store_ps(pC, _mm256_load_ps(pL));
-				pC += 8;
-				pL += 8;
+				_mm256_store_ps(pC + n, _mm256_load_ps(pL + n));
 			}
 			for(int n = nc - nc % 8; n < nc; ++n)
 			{
@@ -247,12 +240,10 @@ void pack_B_avx(int kc, int nc, float* packB, float* B, int ldb)
 			float* pPack = packB + (j / COL_BATCH) * kc * COL_BATCH + k * COL_BATCH;
 			for(int i = 0; i < n_len; ++i)
 			{
-				pPack[i] = pB[i];	
+				pPack[i] = pB[i];
 			}
-			++pB;
 		}
 	}
-
 }
 	
 void packed_sgemm(int M, int N, int K, float *packA, float *b, int ldb, float *c, int ldc, int nc, int kc)
@@ -269,7 +260,6 @@ void packed_sgemm(int M, int N, int K, float *packA, float *b, int ldb, float *c
 	
 	float* packB = (float *) _mm_malloc(sizeof(float) * kc * nc, 32);
 	//float* loadC = (float *) _mm_malloc(sizeof(float) * 6 * nc, 32);
-	float loadC[6 * nc];
 	
 	//Our GEMM is implemented in GEPB fashion, as the operands are row-major
 	int k_len = kc;
@@ -279,14 +269,16 @@ void packed_sgemm(int M, int N, int K, float *packA, float *b, int ldb, float *c
 		k_len = (kt == KBlocks - 1) ? (K - kt * kc) : kc;
 		for(int nt = 0; nt < NBlocks; ++nt)
 		{
+			float loadC[6 * nc];
 			float* pA = packA + kt * kc * M_align;
 			float* pB = b + kt * kc * ldb + nt * nc;
 			float* pC = c + nt * nc; 
 			if(nt == NBlocks - 1)
-				n_len = N - nt*nc;
+				n_len = N - nt * nc;
 			else
 				n_len = nc;
 			//I'm going to pack B in here.
+			memset(packB, 0, sizeof(float) * kc * nc);
 			pack_B_avx(k_len, n_len, packB, pB, N);
 			compute_block(M_align, n_len, k_len, pA, packB, loadC, pC, ldc);
 		}
