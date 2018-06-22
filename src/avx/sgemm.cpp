@@ -126,7 +126,7 @@ void inner_kernel_6x16(int K, float *packA, float *packB, float *c, int ldc)
 inline void compute_block(int M, int nc, int kc, float* packA, float* packB, float* loadC, float *C, int ldc)
 {
 	//M is already aligned. 
-	int nc_aligned = align_ceil(nc, 16);
+	int nc_ceil = align_ceil(nc, 16);
 	memset(loadC, 0, 6*nc*sizeof(float));
 	for(int i = 0; i < M; i += 6)
 	{
@@ -134,12 +134,8 @@ inline void compute_block(int M, int nc, int kc, float* packA, float* packB, flo
 		float* rC = C + i * ldc;
 		for(int m = 0; m < 6; ++m)
 		{
-			//for(int n = 0; n < nc; ++n)
-			//{
-			//	loadC[m * nc_aligned + n] = rC[m * ldc + n];
-			//}
 			float* pC = rC + m * ldc;
-			float* pL = loadC + m * nc_aligned;
+			float* pL = loadC + m * nc_ceil;
 			for(int n = 0; n < nc; n += 8)
 			{
 				_mm256_store_ps(pL, _mm256_load_ps(pC));
@@ -151,19 +147,19 @@ inline void compute_block(int M, int nc, int kc, float* packA, float* packB, flo
 				pL[n] = pC[n];
 			}
 		}
-		for(int j = 0; j < nc_aligned; j+=16)
+		for(int j = 0; j < nc_ceil; j+=16)
 		{
 			float* pC = loadC + j;
 			float* pA = packA + i * kc;
 			float* pB = packB + j * kc;
-			inner_kernel_6x16(kc, pA, pB, pC, nc_aligned);
+			inner_kernel_6x16(kc, pA, pB, pC, nc_ceil);
 				
 		}
 		//Write Results
 		for(int m = 0; m < 6; ++m)
 		{
 			float* pC = rC + m * ldc;
-			float* pL = loadC + m * nc_aligned;
+			float* pL = loadC + m * nc_ceil;
 			for(int n = 0; n < nc; n += 8)
 			{
 				_mm256_store_ps(pC + n, _mm256_load_ps(pL + n));
@@ -171,6 +167,72 @@ inline void compute_block(int M, int nc, int kc, float* packA, float* packB, flo
 			for(int n = nc - nc % 8; n < nc; ++n)
 			{
 				pC[n] = pL[n];
+			}
+		}
+	}
+}
+
+template<bool fuseBias, bool fuseRelu>
+inline void compute_block_activation(int M, int nc, int kc, float* packA, float* packB, float* loadC, float *C, int ldc, float* bias, int bias_len)
+{
+	//M is already aligned. 
+	int nc_ceil = align_ceil(nc, 16);
+	int nc_floor = nc - nc % 8;
+	for(int i = 0; i < M; i += 6)
+	{
+		//Load C into cache
+		float* rC = C + i * ldc;
+		for(int m = 0; m < 6; ++m)
+		{
+			float* pC = rC + m * ldc;
+			float* pL = loadC + m * nc_ceil;
+			for(int n = 0; n < nc_floor; n += 8)
+			{
+				_mm256_store_ps(pL + n, _mm256_load_ps(pC + n));
+			}
+			for(int n = nc - nc % 8; n < nc; ++n)
+			{
+				pL[n] = pC[n];
+			}
+		}
+		for(int j = 0; j < nc_ceil; j+=16)
+		{
+			float* pC = loadC + j;
+			float* pA = packA + i * kc;
+			float* pB = packB + j * kc;
+			inner_kernel_6x16(kc, pA, pB, pC, nc_ceil);
+				
+		}
+		//Write Results
+		for(int m = 0; m < 6; ++m)
+		{
+			float* pC = rC + m * ldc;
+			float* pL = loadC + m * nc_ceil;
+			__m256 vZero = _mm256_set1_ps(0.f);
+			__m256 vBias = vZero;
+			if(m + i < bias_len){
+				if(fuseBias)
+					vBias = _mm256_broadcast_ss(bias + i + m);
+			}
+			for(int n = 0; n < nc_floor; n += 8)
+			{
+				__m256 vec = _mm256_load_ps(pL + n);
+				if(fuseBias)
+					vec = _mm256_add_ps(vec, vBias);
+				if(fuseRelu)
+					vec = _mm256_max_ps(vec, vZero);
+
+				_mm256_store_ps(pC + n, vec);
+			}
+			//Last column batch.
+			for(int n = nc - nc % 8; n < nc; ++n)
+			{
+				float l = pL[n];
+				if(fuseBias && ((i + m) < bias_len))
+					l += bias[i + m];
+				if(fuseRelu)
+					l = (l > 0) ? l : 0;
+				pC[n] = l;
 			}
 		}
 	}
@@ -246,7 +308,9 @@ void pack_B_avx(int kc, int nc, float* packB, float* B, int ldb)
 	}
 }
 	
-void packed_sgemm(int M, int N, int K, float *packA, float *b, int ldb, float *c, int ldc, int nc, int kc)
+//void packed_sgemm(int M, int N, int K, float *packA, float *b, int ldb, float *c, int ldc, int nc, int kc)
+template<bool fuseBias, bool fuseRelu>
+void packed_sgemm_activation(int M, int N, int K, float *packA, float *b, int ldb, float *c, int ldc, int nc, int kc, float* bias)
 {
 	for(int i = 0; i < M; ++i){
 		memset(c + ldc * i, 0, sizeof(float) * N);
@@ -264,9 +328,9 @@ void packed_sgemm(int M, int N, int K, float *packA, float *b, int ldb, float *c
 	//Our GEMM is implemented in GEPB fashion, as the operands are row-major
 	int k_len = kc;
 	int n_len = nc;
-	for(int kt = 0; kt < KBlocks; ++kt)
+	for(int kt = 0; kt < KBlocks - 1; ++kt)
 	{
-		k_len = (kt == KBlocks - 1) ? (K - kt * kc) : kc;
+		//k_len = (kt == KBlocks - 1) ? (K - kt * kc) : kc;
 		for(int nt = 0; nt < NBlocks; ++nt)
 		{
 			float loadC[6 * nc];
@@ -281,7 +345,32 @@ void packed_sgemm(int M, int N, int K, float *packA, float *b, int ldb, float *c
 			memset(packB, 0, sizeof(float) * kc * nc);
 			pack_B_avx(k_len, n_len, packB, pB, N);
 			compute_block(M_align, n_len, k_len, pA, packB, loadC, pC, ldc);
+			//compute_block_activation<false, false>(M_align, n_len, k_len, pA, packB, loadC, pC, ldc, bias, M);
+		}
+	}
+	{
+		int kt = KBlocks - 1;
+		k_len = (K - kt * kc);
+		for(int nt = 0; nt < NBlocks; ++nt)
+		{
+			float loadC[6 * nc];
+			float* pA = packA + kt * kc * M_align;
+			float* pB = b + kt * kc * ldb + nt * nc;
+			float* pC = c + nt * nc; 
+			if(nt == NBlocks - 1)
+				n_len = N - nt * nc;
+			else
+				n_len = nc;
+			//I'm going to pack B in here.
+			memset(packB, 0, sizeof(float) * kc * nc);
+			pack_B_avx(k_len, n_len, packB, pB, N);
+			compute_block_activation<fuseBias, fuseRelu>(M_align, n_len, k_len, pA, packB, loadC, pC, ldc, bias, M);
 		}
 	}
 	_mm_free(packB);
 }
+
+template void packed_sgemm_activation<false, false>(int, int, int, float *, float *, int, float *, int , int , int , float* );
+template void packed_sgemm_activation<false,  true>(int, int, int, float *, float *, int, float *, int , int , int , float* );
+template void packed_sgemm_activation<true,  false>(int, int, int, float *, float *, int, float *, int , int , int , float* );
+template void packed_sgemm_activation<true,   true>(int, int, int, float *, float *, int, float *, int , int , int , float* );

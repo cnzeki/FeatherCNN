@@ -21,7 +21,7 @@
 
 #include <stdio.h>
 #include <cstring>
-#define LAYER_TIMING
+//#define LAYER_TIMING
 
 namespace feather
 {
@@ -74,6 +74,7 @@ int Net::Forward(float *input)
         input_layer->CopyInput(input_layer->input_name(i), input);
     }
     for (int i = 1; i < layers.size(); ++i)
+    //for (int i = 1; i < 3; ++i)
     {
 #ifdef LAYER_TIMING
         timespec tpstart, tpend;

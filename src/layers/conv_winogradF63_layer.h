@@ -37,7 +37,7 @@ class ConvWinogradF63Layer : public ConvLayer
             : ConvLayer(layer_param, rt_param)
         {
             fuse_relu = false;
-            _fusible = false;
+            _fusible = true;
         }
 
 

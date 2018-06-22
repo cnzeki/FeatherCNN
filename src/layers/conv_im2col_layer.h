@@ -51,8 +51,9 @@ class ConvIm2colLayer : public ConvLayer
 {
     public:
         ConvIm2colLayer(const LayerParameter *layer_param, const RuntimeParameter<float>* rt_param)
-            : img_buffer(0), ConvLayer(layer_param, rt_param)
+            : fuse_relu(false), img_buffer(0), ConvLayer(layer_param, rt_param)
         {
+		_fusible = true;
         }
 
 
@@ -97,19 +98,6 @@ class ConvIm2colLayer : public ConvLayer
                                                             packed_kernel, img_buffer + k * block, output, (int)num_threads);
                 }
             }
-#endif
-#ifdef FEATHER_AVX
-	    printf("im2col\n");
-            Im2col();
-            //naive_sgemm(output_channels, output_height * output_width, input_channels * kernel_width * kernel_height, kernel_data, img_buffer, output);
-	    const int M = output_channels;
-	    const int N = output_height * output_width;
-	    const int K = input_channels * kernel_width * kernel_height;
-	    const int nc = 160;
-	    const int kc = 320;
-	    packed_sgemm(M, N, K, packed_kernel, img_buffer, N, output, N, nc, kc);
-#endif
-
             if (bias_term)
             {
                 size_t out_stride = output_width * output_height;
@@ -122,9 +110,32 @@ class ConvIm2colLayer : public ConvLayer
                     }
                 }
             }
+#endif
+#ifdef FEATHER_AVX
+            Im2col();
+            //naive_sgemm(output_channels, output_height * output_width, input_channels * kernel_width * kernel_height, kernel_data, img_buffer, output);
+	    const int M = output_channels;
+	    const int N = output_height * output_width;
+	    const int K = input_channels * kernel_width * kernel_height;
+	    const int nc = 160;
+	    const int kc = 320;
+	    packed_sgemm(M, N, K, packed_kernel, img_buffer, N, output, N, nc, kc, bias_data);
+#endif
             return 0;
         }
 
+        int Fuse(Layer *next_layer)
+        {
+            if (next_layer->type().compare("ReLU") == 0)
+            {
+                fuse_relu = true;
+                return 1;
+            }
+            else
+            {
+                return 0;
+            }
+        }
 
         bool Im2col()
         {
@@ -215,9 +226,6 @@ class ConvIm2colLayer : public ConvLayer
             int M = (int) output_channels;
 	    int N = output_height * output_width;
             _top_blobs[_top[0]]->Realloc(get_aligned_size(M, N));
-	    printf("Realloc M %d, N %d, diff %d\n", M, N, (get_aligned_size(M, N) - M * N));
-	    float* output_xx = _top_blobs[_top[0]]->data();
-	    printf("output_xx 0x%x\n", output_xx);
 #endif
             return 0;
         }
@@ -235,6 +243,16 @@ class ConvIm2colLayer : public ConvLayer
 #ifdef FEATHER_AVX
             MEMPOOL_CHECK_RETURN(private_mempool.Alloc(&packed_kernel, sizeof(float) * get_aligned_size(M, K)));
 	    packed_sgemm_init<6>(M, K, 320, packed_kernel, kernel_data, K);
+	    if(bias_term && fuse_relu)
+		    packed_sgemm = packed_sgemm_activation<true, true>;
+	    else if(bias_term)
+		    packed_sgemm = packed_sgemm_activation<true, false>;
+	    else if(fuse_relu)
+		    packed_sgemm = packed_sgemm_activation<false, true>;
+	    else
+		    packed_sgemm = packed_sgemm_activation<false, false>;
+
+
 #endif
 #ifdef FEATHER_ARM 
             MEMPOOL_CHECK_RETURN(private_mempool.Alloc(&packed_kernel, sizeof(float) * eM * K));
@@ -251,15 +269,17 @@ class ConvIm2colLayer : public ConvLayer
             //Setup input and output pointers.
             input = _bottom_blobs[_bottom[0]]->data();
             output = _top_blobs[_top[0]]->data();
-	    printf("output 0x%x\n", output);
             //_top_blobs[_top[0]]->PrintBlobInfo();
             return 0;
         }
+
     private:
         float* packed_kernel;
         float* img_buffer;
 
         float* input;
         float* output;
+	bool fuse_relu;
+	void (*packed_sgemm)(int M, int N, int K, float *packA, float *b, int ldb, float *c, int ldc, int nc, int kc, float* bias);
 };
 };
