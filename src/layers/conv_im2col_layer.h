@@ -32,21 +32,6 @@
 
 namespace feather
 {
-void naive_sgemm(int M, int N, int L, float* A, float* B, float* C)
-{
-    for (int i = 0; i < M; ++i) //loop over rows in C
-    {
-        for (int j = 0; j < N; ++j) //loop over columns in C
-        {
-            float sigma = 0;
-            for (int k = 0; k < L; ++k)
-            {
-                sigma += A[i * L + k] * B[k * N + j];
-            }
-            C[i * N + j] = sigma;
-        }
-    }
-}
 class ConvIm2colLayer : public ConvLayer
 {
     public:
@@ -113,7 +98,6 @@ class ConvIm2colLayer : public ConvLayer
 #endif
 #ifdef FEATHER_AVX
             Im2col();
-            //naive_sgemm(output_channels, output_height * output_width, input_channels * kernel_width * kernel_height, kernel_data, img_buffer, output);
 	    const int M = output_channels;
 	    const int N = output_height * output_width;
 	    const int K = input_channels * kernel_width * kernel_height;
@@ -206,6 +190,7 @@ class ConvIm2colLayer : public ConvLayer
             return true;
         }
 
+#if 0
         int GenerateTopBlobs()
         {
             //Conv layer has and only has one bottom blob.
@@ -229,6 +214,7 @@ class ConvIm2colLayer : public ConvLayer
 #endif
             return 0;
         }
+#endif
 
         int Init()
         {
@@ -237,11 +223,10 @@ class ConvIm2colLayer : public ConvLayer
             int K = (int)input_channels * (int)kernel_height * (int)kernel_width;
             int eM = M + (8 - M % 8) % 8;
 
-
             MEMPOOL_CHECK_RETURN(common_mempool->Request(sizeof(float) * (input_channels * kernel_height * kernel_width) * (output_width * output_height)));
 
 #ifdef FEATHER_AVX
-            MEMPOOL_CHECK_RETURN(private_mempool.Alloc(&packed_kernel, sizeof(float) * get_aligned_size(M, K)));
+            MEMPOOL_CHECK_RETURN(private_mempool.Alloc(&packed_kernel, sizeof(float) * M * K));
 	    packed_sgemm_init<6>(M, K, 320, packed_kernel, kernel_data, K);
 	    if(bias_term && fuse_relu)
 		    packed_sgemm = packed_sgemm_activation<true, true>;
