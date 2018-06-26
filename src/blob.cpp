@@ -21,7 +21,7 @@ template<class Dtype>
 void Blob<Dtype>::Alloc()
 {
     size_t dim_byte = _num * _channels * _height * _width * sizeof(Dtype);
-    _data = (Dtype*) _mm_malloc(dim_byte, 128);
+    _data = (Dtype*) _mm_malloc(dim_byte, 32);
 }
 template<class Dtype>
 void Blob<Dtype>::Realloc(size_t elem_size)
@@ -29,7 +29,7 @@ void Blob<Dtype>::Realloc(size_t elem_size)
     if(elem_size > this->data_size())
     {
     	_mm_free(_data);
-    	_data = (Dtype*) _mm_malloc(elem_size * sizeof(Dtype), 128);
+    	_data = (Dtype*) _mm_malloc(elem_size * sizeof(Dtype), 32);
     }
 }
 

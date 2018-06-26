@@ -9,6 +9,7 @@ int align_ceil(int num, int align)
 
 void (*inner_kernel_Nx16)(int K, float *packA, float *packB, float *c, int ldc);
 
+#include <stdio.h>
 template<int N>
 void inner_kernel_Nx16_template(int K, float *packA, float *packB, float *c, int ldc)
 {
@@ -218,7 +219,7 @@ inline void compute_block_activation(int M, int nc, int kc, float* packA, float*
 				if(fuseRelu)
 					vec = _mm256_max_ps(vec, vZero);
 
-				_mm256_store_ps(pC + n, vec);
+				_mm256_storeu_ps(pC + n, vec);
 			}
 			//Last column batch.
 			for(int n = nc - nc % 8; n < nc; ++n)
@@ -277,7 +278,7 @@ inline void compute_block_activation(int M, int nc, int kc, float* packA, float*
 				if(fuseRelu)
 					vec = _mm256_max_ps(vec, vZero);
 
-				_mm256_store_ps(pC + n, vec);
+				_mm256_storeu_ps(pC + n, vec);
 			}
 			//Last column batch.
 			for(int n = nc - nc % 8; n < nc; ++n)
@@ -341,8 +342,8 @@ void pack_B_avx(int kc, int nc, float* packB, float* B, int ldb)
 		for(int j = 0; j < nc_floor; j+=COL_BATCH)
 		{
 			float* pPack = packB + (j / COL_BATCH) * kc * COL_BATCH + k * COL_BATCH;
-			_mm256_store_ps(pPack, _mm256_load_ps(pB));
-			_mm256_store_ps(pPack + 8, _mm256_load_ps(pB + 8));
+			_mm256_store_ps(pPack, _mm256_loadu_ps(pB));
+			_mm256_store_ps(pPack + 8, _mm256_loadu_ps(pB + 8));
 			pB += 16;
 		}
 		if(nc_floor < nc)
@@ -372,7 +373,9 @@ void packed_sgemm_activation(int M, int N, int K, float *packA, float *b, int ld
 	int NBlocks = (N_align + nc - 1) / nc;
 	int KBlocks = (K + kc - 1) / kc;
 	
-	float* packB = (float *) _mm_malloc(sizeof(float) * kc * nc, 32);
+	//float* packB = (float *) _mm_malloc(sizeof(float) * kc * nc, 32);
+	//float* loadC = (float *) _mm_malloc(sizeof(float) * 6 * nc, 32);
+	//printf("loadC %x %d\n", loadC, ((size_t) loadC) % 32);
 	
 	//Our GEMM is implemented in GEPB fashion, as the operands are row-major
 	int k_len = kc;
@@ -380,9 +383,11 @@ void packed_sgemm_activation(int M, int N, int K, float *packA, float *b, int ld
 	for(int kt = 0; kt < KBlocks - 1; ++kt)
 	{
 		//k_len = (kt == KBlocks - 1) ? (K - kt * kc) : kc;
+#pragma omp parallel for num_threads(2)
 		for(int nt = 0; nt < NBlocks; ++nt)
 		{
-			float loadC[6 * nc];
+			__attribute__((aligned(32))) float loadC[6 * nc];
+			__attribute__((aligned(32))) float packB[kc * nc];
 			//float* pA = packA + kt * kc * M_align;
 			float* pA = packA + kt * kc * M;
 			float* pB = b + kt * kc * ldb + nt * nc;
@@ -399,10 +404,14 @@ void packed_sgemm_activation(int M, int N, int K, float *packA, float *b, int ld
 	{
 		int kt = KBlocks - 1;
 		k_len = (K - kt * kc);
+		__attribute__((aligned(32))) float loadC[6 * nc];
+#pragma omp parallel for num_threads(2)
 		for(int nt = 0; nt < NBlocks; ++nt)
 		{
-			float loadC[6 * nc];
+			//float loadC[6 * nc];
 			//float* pA = packA + kt * kc * M_align;
+			__attribute__((aligned(32))) float loadC[6 * nc];
+			__attribute__((aligned(32))) float packB[kc * nc];
 			float* pA = packA + kt * kc * M;
 			float* pB = b + kt * kc * ldb + nt * nc;
 			float* pC = c + nt * nc; 
@@ -416,7 +425,8 @@ void packed_sgemm_activation(int M, int N, int K, float *packA, float *b, int ld
 			compute_block_activation<fuseBias, fuseRelu>(M, n_len, k_len, pA, packB, loadC, pC, ldc, bias, M);
 		}
 	}
-	_mm_free(packB);
+	//_mm_free(packB);
+	//_mm_free(loadC);
 }
 
 template void packed_sgemm_activation<false, false>(int, int, int, float *, float *, int, float *, int , int , int , float* );
