@@ -168,54 +168,6 @@ void set_kernel(int k)
 	}
 }
 
-inline void compute_block(int M, int nc, int kc, float* packA, float* packB, float* loadC, float *C, int ldc)
-{
-	//M is already aligned. 
-	int nc_ceil = align_ceil(nc, 16);
-	memset(loadC, 0, 6*nc*sizeof(float));
-	for(int i = 0; i < M; i += 6)
-	{
-		//Load C into cache
-		float* rC = C + i * ldc;
-		for(int m = 0; m < 6; ++m)
-		{
-			float* pC = rC + m * ldc;
-			float* pL = loadC + m * nc_ceil;
-			for(int n = 0; n < nc; n += 8)
-			{
-				_mm256_store_ps(pL, _mm256_load_ps(pC));
-				pC += 8;
-				pL += 8;
-			}
-			for(int n = nc - nc % 8; n < nc; ++n)
-			{
-				pL[n] = pC[n];
-			}
-		}
-		for(int j = 0; j < nc_ceil; j+=16)
-		{
-			float* pC = loadC + j;
-			float* pA = packA + i * kc;
-			float* pB = packB + j * kc;
-			inner_kernel_Nx16_template<6>(kc, pA, pB, pC, nc_ceil);
-				
-		}
-		//Write Results
-		for(int m = 0; m < 6; ++m)
-		{
-			float* pC = rC + m * ldc;
-			float* pL = loadC + m * nc_ceil;
-			for(int n = 0; n < nc; n += 8)
-			{
-				_mm256_store_ps(pC + n, _mm256_load_ps(pL + n));
-			}
-			for(int n = nc - nc % 8; n < nc; ++n)
-			{
-				pC[n] = pL[n];
-			}
-		}
-	}
-}
 
 template<bool fuseBias, bool fuseRelu>
 inline void compute_block_activation(int M, int nc, int kc, float* packA, float* packB, float* loadC, float *C, int ldc, float* bias, int bias_len)
@@ -439,11 +391,8 @@ void packed_sgemm_activation(int M, int N, int K, float *packA, float *b, int ld
 				n_len = N - nt * nc;
 			else
 				n_len = nc;
-			//I'm going to pack B in here.
 			memset(packB, 0, sizeof(float) * kc * nc);
 			pack_B_avx(k_len, n_len, packB, pB, N);
-			//compute_block(M_align, n_len, k_len, pA, packB, loadC, pC, ldc);
-			//compute_block_activation<false, false>(M_align, n_len, k_len, pA, packB, loadC, pC, ldc, bias, M);
 			compute_block_activation<false, false>(M, n_len, k_len, pA, packB, loadC, pC, ldc, bias, M);
 		}
 	}
@@ -464,7 +413,6 @@ void packed_sgemm_activation(int M, int N, int K, float *packA, float *b, int ld
 			//I'm going to pack B in here.
 			memset(packB, 0, sizeof(float) * kc * nc);
 			pack_B_avx(k_len, n_len, packB, pB, N);
-			//compute_block_activation<fuseBias, fuseRelu>(M_align, n_len, k_len, pA, packB, loadC, pC, ldc, bias, M);
 			compute_block_activation<fuseBias, fuseRelu>(M, n_len, k_len, pA, packB, loadC, pC, ldc, bias, M);
 		}
 	}
