@@ -13,7 +13,19 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <stdint.h>
+#ifdef WIN32
+#ifndef _UNISTD_H
+#define _UNISTD_H
+#include <io.h>
+#include <process.h>
+#define uni_open   _open
+#define uni_close  _close
+#endif
+#else
 #include <unistd.h>
+#define uni_open   open
+#define uni_close  close
+#endif
 
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
@@ -61,9 +73,37 @@ bool CaffeModelWeightsConvert::Convert()
 
 }
 
+using google::protobuf::io::FileInputStream;
+using google::protobuf::io::FileOutputStream;
+using google::protobuf::io::ZeroCopyInputStream;
+using google::protobuf::io::CodedInputStream;
+using google::protobuf::io::ZeroCopyOutputStream;
+using google::protobuf::io::CodedOutputStream;
+using google::protobuf::Message;
+const int kProtoReadBytesLimit = INT_MAX;  // Max size of 2 GB minus 1 byte.
+
+bool ReadProtoFromBinaryFile(const char* filename, Message* proto) {
+#if defined (WIN32)  // for MSC compiler binary flag needs to be specified
+	int fd = open(filename, O_RDONLY | O_BINARY);
+#else
+	int fd = open(filename, O_RDONLY);
+#endif
+	ZeroCopyInputStream* raw_input = new FileInputStream(fd);
+	CodedInputStream* coded_input = new CodedInputStream(raw_input);
+	coded_input->SetTotalBytesLimit(kProtoReadBytesLimit, 536870912);
+
+	bool success = proto->ParseFromCodedStream(coded_input);
+
+	delete coded_input;
+	delete raw_input;
+	close(fd);
+	return success;
+}
+
 bool CaffeModelWeightsConvert::ReadNetParam()
 {
-    {
+    if(0)
+	{
         std::ifstream in(caffe_model_name.c_str());
         std::stringstream buffer;
         buffer << in.rdbuf();
@@ -76,9 +116,11 @@ bool CaffeModelWeightsConvert::ReadNetParam()
 
         in.close();
     }
+	ReadProtoFromBinaryFile(caffe_model_name.c_str(), &net_param);
+	printf("model layers:%d\n", net_param.layers_size());
 
     {
-        int fd = open(caffe_prototxt_name.c_str(), O_RDONLY);
+        int fd = uni_open(caffe_prototxt_name.c_str(), O_RDONLY);
         if (fd < 0)
         {
             std::cerr << "read caffe model prototxt " << caffe_prototxt_name  << " fail!" << std::endl;
@@ -88,7 +130,7 @@ bool CaffeModelWeightsConvert::ReadNetParam()
         FileInputStream* input = new FileInputStream(fd);
         bool success = google::protobuf::TextFormat::Parse(input, &net_param_prototxt);
         delete input;
-        close(fd);
+        uni_close(fd);
     }
     return true;
 }
