@@ -14,7 +14,7 @@ More detail can be found in the original project  [FeatherCNN](https://github.co
 Install [Android NDK](https://developer.android.google.cn/ndk/downloads/)  and run
 
 ```
-build_scripts\build_windows.bat
+build_scripts\build_ndk.bat
 ```
 
 If everything goes well, headers and so file will be in a new  **feather**  directory.
