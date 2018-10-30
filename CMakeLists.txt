@@ -52,14 +52,35 @@ if(FEATHER_OPENMP)
 endif()
 
 #add_definitions(-Wall -Wextra -Wno-unused-function)
-add_definitions(-fPIC)
-add_definitions(-Ofast)
-add_definitions(-ffast-math)
-# add_definitions(-march=native)
+if (MSVC)
+  # MSVC warning suppressions
+  add_definitions(
+    /wd4018 # 'expression' : signed/unsigned mismatch
+    /wd4065 # switch statement contains 'default' but no 'case' labels
+    /wd4146 # unary minus operator applied to unsigned type, result still unsigned
+    /wd4244 # 'conversion' conversion from 'type1' to 'type2', possible loss of data
+    /wd4251 # 'identifier' : class 'type' needs to have dll-interface to be used by clients of class 'type2'
+    /wd4267 # 'var' : conversion from 'size_t' to 'type', possible loss of data
+    /wd4305 # 'identifier' : truncation from 'type1' to 'type2'
+    /wd4307 # 'operator' : integral constant overflow
+    /wd4309 # 'conversion' : truncation of constant value
+    /wd4334 # 'operator' : result of 32-bit shift implicitly converted to 64 bits (was 64-bit shift intended?)
+    /wd4355 # 'this' : used in base member initializer list
+    /wd4506 # no definition for inline function 'function'
+    /wd4477 # fprintf
+    /wd4800 # 'type' : forcing value to bool 'true' or 'false' (performance warning)
+    /wd4996 # The compiler encountered a deprecated declaration.
+  )
+else (MSVC)
+    add_definitions(-fPIC)
+    add_definitions(-Ofast)
+    add_definitions(-ffast-math)
+    # add_definitions(-march=native)
 
-# add_definitions(-flto)
+    # add_definitions(-flto)
 
-add_definitions(-fvisibility=hidden -fvisibility-inlines-hidden)
+    add_definitions(-fvisibility=hidden -fvisibility-inlines-hidden)
+endif (MSVC)
 
 if(ANDROID)
     # disable shared library on android
@@ -83,3 +104,4 @@ add_subdirectory(src)
 #if(NOT ANDROID AND NOT IOS)
 #	add_subdirectory(tools)
 #endif()
+    
