@@ -25,7 +25,16 @@ int min(int a, int b)
 void* _mm_malloc(size_t sz, size_t align)
 {
     void *ptr;
+#if defined( __APPLE__ ) || defined( WIN32) || defined(ANDROID)
     return malloc(sz);
+#else
+    int alloc_result = posix_memalign(&ptr, align, sz);
+    if (alloc_result != 0)
+    {
+        return NULL;
+    }
+    return ptr;
+#endif
 }
 
 void _mm_free(void* ptr)

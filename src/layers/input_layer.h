@@ -60,6 +60,12 @@ class InputLayer : public Layer
             return 0;
         }
 
+		int Reshape(std::string name, int num, int channels, int height, int width)
+		{
+			_top_blobs[name]->ReshapeWithRealloc(num, channels, height, width);
+			return 0;
+		}
+
         int Init()
         {
             return 0;
@@ -76,7 +82,10 @@ class InputLayer : public Layer
             // return (input_blob_map.find(input_blob_name) == input_blob_name.end()) ? false : true;
             return false;
         }
-
+		bool HasInputBlob(std::string input_blob_name)
+		{
+			return (_top_blobs.find(input_blob_name) == _top_blobs.end()) ? false : true;
+		}
         size_t input_size()
         {
             return _top_blobs.size();

@@ -97,28 +97,7 @@ int Net::Forward(float *input)
     {
         input_layer->CopyInput(input_layer->input_name(i), input);
     }
-    
-    for (int i = 1; i < layers.size(); ++i)
-    {
-#ifdef LAYER_TIMING
-        timespec tpstart, tpend;
-        clock_gettime(CLOCK_MONOTONIC, &tpstart);
-#endif
-        //LOGD("Forward layer%d:%s %s\n", i, layers[i]->name().c_str(), layers[i]->type().c_str());
-        layers[i]->Forward();
-#if 0
-        for (size_t j = 0; j < layers[i]->top_blob_size(); j++)
-            layers[i]->top_blob(j)->PrintBlobInfo();
-
-	PrintBlobData(layers[i]->name());	
-#endif
-#ifdef LAYER_TIMING
-        clock_gettime(CLOCK_MONOTONIC, &tpend);
-        double timedif = 1000000.0 * (tpend.tv_sec - tpstart.tv_sec) + (tpend.tv_nsec - tpstart.tv_nsec) / 1000.0;
-        LOGD("layer %s type %s spent %lfms\n", layers[i]->name().c_str(), layers[i]->type().c_str(), timedif / 1000.0);
-#endif
-
-    }
+	Forward();
     return 0;
 }
 
@@ -127,20 +106,7 @@ int Net::Forward(float* input, int height, int width)
     InputLayer *input_layer = (InputLayer *)layers[0];
     input_layer->Reshape(input_layer->input_name(0), height, width);
     input_layer->CopyInput(input_layer->input_name(0), input);
-    for (int i = 1; i < layers.size(); ++i)
-    {
-#ifdef LAYER_TIMING
-        timespec tpstart, tpend;
-        clock_gettime(CLOCK_MONOTONIC, &tpstart);
-#endif
-// LOGI("Forward layer%d:%s %s\n", i, layers[i]->name().c_str(), layers[i]->type().c_str());
-        layers[i]->ForwardReshape();
-#ifdef LAYER_TIMING
-        clock_gettime(CLOCK_MONOTONIC, &tpend);
-        double timedif = 1000000.0 * (tpend.tv_sec - tpstart.tv_sec) + (tpend.tv_nsec - tpstart.tv_nsec) / 1000.0;
-        LOGI("layer %s type %s spent %lfms\n", layers[i]->name().c_str(), layers[i]->type().c_str(), timedif / 1000.0);
-#endif
-    }
+	Forward();
     return 0;
 }
 
@@ -284,7 +250,7 @@ bool Net::InitFromBuffer(const void *net_buffer)
 
     //Rebuild blob map
     blob_map.clear();
-    for (int i = 1; i < layers.size(); ++i)
+    for (int i = 0; i < layers.size(); ++i)
     {
         for (int t = 0; t < layers[i]->top_size(); ++t)
         {
@@ -292,11 +258,113 @@ bool Net::InitFromBuffer(const void *net_buffer)
             blob_map[blob_name] = layers[i]->top_blob(blob_name);
             //blob_map[blob_name]->PrintBlobInfo();
         }
-        layers[i]->Init();
+		if (i > 0)
+		{
+			layers[i]->Init();
+		}
     }
 
     //Allocate for common mempool.
     rt_param->common_mempool()->Alloc();
     return true;
+}
+// Wrapper
+int Net::FeedBlob(float* input, int dims[4], std::string blob_name)
+{
+	InputLayer *input_layer = (InputLayer *)layers[0];
+	if (!input_layer->HasInputBlob(blob_name))
+	{
+		return -1;
+	}
+	input_layer->Reshape(blob_name, dims[0], dims[1], dims[2], dims[3] );
+	input_layer->CopyInput(blob_name, input);
+	return 0;
+}
+
+int Net::GetBlobDims(int dims[4], std::string blob_name)
+{
+	if (blob_map.find(std::string(blob_name)) == blob_map.end())
+	{
+		LOGE("Cannot find blob %s\n", blob_name.c_str());
+		return -1;
+	}
+	const Blob<float> *p_blob = blob_map[blob_name];
+	dims[0] = p_blob->num();
+	dims[1] = p_blob->channels();
+	dims[2] = p_blob->height();
+	dims[3] = p_blob->width();
+	return 0;
+}
+
+int Net::Forward()
+{
+	for (int i = 1; i < layers.size(); ++i)
+	{
+#ifdef LAYER_TIMING
+		timespec tpstart, tpend;
+		clock_gettime(CLOCK_MONOTONIC, &tpstart);
+#endif
+		// LOGI("Forward layer%d:%s %s\n", i, layers[i]->name().c_str(), layers[i]->type().c_str());
+		layers[i]->ForwardReshape();
+#ifdef LAYER_TIMING
+		clock_gettime(CLOCK_MONOTONIC, &tpend);
+		double timedif = 1000000.0 * (tpend.tv_sec - tpstart.tv_sec) + (tpend.tv_nsec - tpstart.tv_nsec) / 1000.0;
+		LOGI("layer %s type %s spent %lfms\n", layers[i]->name().c_str(), layers[i]->type().c_str(), timedif / 1000.0);
+#endif
+	}
+	return 0;
+}
+
+int Net::ForwardFromTo(int startIdx, int endIdx)
+{
+	for (int i = startIdx; i <= endIdx && i < layers.size(); ++i)
+	{
+#ifdef LAYER_TIMING
+		timespec tpstart, tpend;
+		clock_gettime(CLOCK_MONOTONIC, &tpstart);
+#endif
+		// LOGI("Forward layer%d:%s %s\n", i, layers[i]->name().c_str(), layers[i]->type().c_str());
+		layers[i]->ForwardReshape();
+#ifdef LAYER_TIMING
+		clock_gettime(CLOCK_MONOTONIC, &tpend);
+		double timedif = 1000000.0 * (tpend.tv_sec - tpstart.tv_sec) + (tpend.tv_nsec - tpstart.tv_nsec) / 1000.0;
+		LOGI("layer %s type %s spent %lfms\n", layers[i]->name().c_str(), layers[i]->type().c_str(), timedif / 1000.0);
+#endif
+	}
+	return 0;
+}
+
+std::vector<std::string>  Net::GetLayerNames()
+{
+	std::vector<std::string> names(layers.size());
+	for (int i = 0; i < layers.size(); ++i)
+	{
+		names[i] = layers[i]->name();
+	}
+	return names;
+}
+
+int Net::GetLayerIndex(std::string layerName)
+{
+	for (int i = 0; i < layers.size(); ++i)
+	{
+		if (layerName == layers[i]->name())
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+std::string Net::GetInputBlobName(int index)
+{
+	InputLayer *input_layer = (InputLayer *)layers[0];
+	return input_layer->input_name(index);
+}
+
+int Net::GetInputBlobSize()
+{
+	InputLayer *input_layer = (InputLayer *)layers[0];
+	return input_layer->input_size();
 }
 };

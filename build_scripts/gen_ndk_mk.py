@@ -49,7 +49,8 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/../src \
                     $(LOCAL_PATH)/../src/arm \
                     $(LOCAL_PATH)/../src/flatbuffers \
                     $(LOCAL_PATH)/../src/general \
-                    $(LOCAL_PATH)/../src/layers 
+                    $(LOCAL_PATH)/../src/layers \
+                    $(LOCAL_PATH)/../src/wrapper \
                     
 LOCAL_ARM_MODE := arm
 LOCAL_CFLAGS += -O3 -std=c++11
@@ -75,6 +76,7 @@ class Visitor:
         return self.files
 
 # build for arm        
+#arm_subdirs = ['src', 'src/flatbuffers', 'src/layers', 'src/arm', 'src/wrapper']
 arm_subdirs = ['src', 'src/flatbuffers', 'src/layers', 'src/arm']
 
 # scan c/c++ files 

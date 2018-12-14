@@ -28,7 +28,7 @@ LOCAL_SRC_FILES  += \
    $(SRC_DIR)/src/arm/sgemm_legacy.cpp \
    $(SRC_DIR)/src/arm/sgemv.cpp \
    $(SRC_DIR)/src/arm/winograd_kernels.cpp \
-   $(SRC_DIR)/src/arm/winograd_kernels_F63.cpp
+   $(SRC_DIR)/src/arm/winograd_kernels_F63.cpp 
 
 # Open OpenMP
 LOCAL_CFLAGS := -DHAVE_OPENMP  
@@ -40,7 +40,8 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/../src \
                     $(LOCAL_PATH)/../src/arm \
                     $(LOCAL_PATH)/../src/flatbuffers \
                     $(LOCAL_PATH)/../src/general \
-                    $(LOCAL_PATH)/../src/layers 
+                    $(LOCAL_PATH)/../src/layers \
+                    $(LOCAL_PATH)/../src/wrapper \
                     
 LOCAL_ARM_MODE := arm
 LOCAL_CFLAGS += -O3 -std=c++11

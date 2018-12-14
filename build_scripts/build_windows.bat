@@ -14,6 +14,7 @@ if not exist %pthread_zip% (
 )
 echo "extract ..."
 tools\unzip  -o -q %pthread_zip% -d pthreads
+del %pthread_zip%
 :: vs solution
 cd build-windows
 cmake -G "Visual Studio 14 2015 Win64"  -DCMAKE_INSTALL_PREFIX=.. ..

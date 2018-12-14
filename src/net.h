@@ -38,7 +38,17 @@ class Net
         int GetBlobDataSize(size_t* data_size, std::string blob_name);
 	    int PrintBlobData(std::string blob_name);
         int ExtractBlob(float* output_ptr, std::string blob_name);//Don't forget to free this memory.
-        std::map<std::string, const Blob<float> *> blob_map;
+		// Wrapper
+		int FeedBlob(float* input, int dims[4], std::string blob_name);
+		int Forward();
+		int ForwardFromTo(int startIdx, int endIdx);
+		std::vector<std::string>  GetLayerNames();
+		int GetLayerIndex(std::string layerName);
+		int GetBlobDims(int dims[4], std::string blob_name);
+		std::string GetInputBlobName(int index);
+		int GetInputBlobSize();
+
+		std::map<std::string, const Blob<float> *> blob_map;
     private:
         std::vector<Layer *> layers;
         RuntimeParameter<float> *rt_param;
